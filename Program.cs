@@ -1,80 +1,72 @@
-﻿using System.Text.Json;
-using PasswordManager.Models;
+﻿using PasswordManager.Models;
 using PasswordManager.Services;
 
 var keyDerivationService = new KeyDerivationService();
 var encryptionService = new EncryptionService();
+var vaultService = new VaultService(keyDerivationService, encryptionService);
 
-const string masterPassword = "MyStrongMasterPassword123!";
+string filePath = "vault.json";
+string masterPassword = "MyStrongMasterPassword123!";
 
-var vault = new VaultData
+Console.WriteLine("=== STEP 2 TEST ===");
+Console.WriteLine();
+
+if (!File.Exists(filePath))
 {
-    Credentials =
+    Console.WriteLine("Creating new vault...");
+    vaultService.CreateVault(filePath, masterPassword);
+    Console.WriteLine("Vault created.");
+    Console.WriteLine();
+}
+
+try
+{
+    Console.WriteLine("Opening vault...");
+    VaultData vault = vaultService.OpenVault(filePath, masterPassword);
+    Console.WriteLine("Vault opened successfully.");
+    Console.WriteLine();
+
+    Console.WriteLine($"Credentials before adding: {vault.Credentials.Count}");
+
+    vault.Credentials.Add(new Credential
     {
-        new Credential
-        {
-            Site = "facebook",
-            Username = "tobias@example.com",
-            Password = "SuperSecretPassword!"
-        },
-        new Credential
-        {
-            Site = "github",
-            Username = "tobiasdev",
-            Password = "AnotherVeryStrongPassword!"
-        }
-    }
-};
+        Site = "facebook",
+        Username = "tobias@example.com",
+        Password = "SuperSecretPassword!"
+    });
 
-string vaultJson = JsonSerializer.Serialize(vault, new JsonSerializerOptions
-{
-    WriteIndented = true
-});
+    vault.Credentials.Add(new Credential
+    {
+        Site = "github",
+        Username = "tobiasdev",
+        Password = "AnotherStrongPassword!"
+    });
 
-Console.WriteLine("Original vault JSON:");
-Console.WriteLine(vaultJson);
-Console.WriteLine();
+    Console.WriteLine($"Credentials after adding: {vault.Credentials.Count}");
+    Console.WriteLine("Saving vault...");
+    vaultService.SaveVault(filePath, vault, masterPassword);
+    Console.WriteLine("Vault saved.");
+    Console.WriteLine();
 
-byte[] salt = keyDerivationService.GenerateSalt();
-byte[] key = keyDerivationService.DeriveKey(
-    masterPassword,
-    salt,
-    KeyDerivationService.DefaultIterations);
+    Console.WriteLine("Re-opening vault to verify...");
+    VaultData reopenedVault = vaultService.OpenVault(filePath, masterPassword);
 
-EncryptedVaultFile encryptedVault = encryptionService.Encrypt(
-    plaintextJson: vaultJson,
-    key: key,
-    salt: salt,
-    iterations: KeyDerivationService.DefaultIterations);
+    Console.WriteLine($"Reopened vault contains {reopenedVault.Credentials.Count} credentials:");
+    Console.WriteLine();
 
-Console.WriteLine("Encrypted vault file:");
-Console.WriteLine(JsonSerializer.Serialize(encryptedVault, new JsonSerializerOptions
-{
-    WriteIndented = true
-}));
-Console.WriteLine();
-
-byte[] derivedKeyAgain = keyDerivationService.DeriveKey(
-    masterPassword,
-    Convert.FromBase64String(encryptedVault.Salt),
-    encryptedVault.Iterations);
-
-string decryptedJson = encryptionService.Decrypt(encryptedVault, derivedKeyAgain);
-
-Console.WriteLine("Decrypted vault JSON:");
-Console.WriteLine(decryptedJson);
-Console.WriteLine();
-
-VaultData? restoredVault = JsonSerializer.Deserialize<VaultData>(decryptedJson);
-
-Console.WriteLine("Restored credentials:");
-if (restoredVault is not null)
-{
-    foreach (var credential in restoredVault.Credentials)
+    foreach (var credential in reopenedVault.Credentials)
     {
         Console.WriteLine($"Site: {credential.Site}");
         Console.WriteLine($"Username: {credential.Username}");
         Console.WriteLine($"Password: {credential.Password}");
         Console.WriteLine();
     }
+}
+catch (UnauthorizedAccessException ex)
+{
+    Console.WriteLine($"Access denied: {ex.Message}");
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"Unexpected error: {ex.Message}");
 }
