@@ -1,14 +1,18 @@
 using PasswordManager.Models;
+using PasswordManager.Utilities;
 
 namespace PasswordManager.Services;
 
 public class ConsoleUiService
 {
     private readonly VaultService _vaultService;
+    private readonly PasswordGeneratorService _passwordGeneratorService;
 
-    public ConsoleUiService(VaultService vaultService)
+    public ConsoleUiService(VaultService vaultService, 
+        PasswordGeneratorService passwordGeneratorService)
     {
         _vaultService = vaultService;
+        _passwordGeneratorService = passwordGeneratorService;
     }
 
     public void Run()
@@ -48,8 +52,8 @@ public class ConsoleUiService
     {
         Console.Clear();
         Console.WriteLine("Create new vault");
-        Console.Write("Enter master password: ");
-        string? masterPassword = Console.ReadLine();
+        
+        string masterPassword = SecureConsole.ReadHiddenInput("Enter master password: ");
 
         if (string.IsNullOrWhiteSpace(masterPassword))
         {
@@ -72,8 +76,8 @@ public class ConsoleUiService
     {
         Console.Clear();
         Console.WriteLine("Open vault");
-        Console.Write("Enter master password: ");
-        string? masterPassword = Console.ReadLine();
+        
+        string masterPassword = SecureConsole.ReadHiddenInput("Enter master password: ");
 
         if (string.IsNullOrWhiteSpace(masterPassword))
         {
@@ -102,7 +106,8 @@ public class ConsoleUiService
             Console.WriteLine("2: List all credentials");
             Console.WriteLine("3: Show credential");
             Console.WriteLine("4: Remove credential");
-            Console.WriteLine("5: Save and exit");
+            Console.WriteLine("5: Generate password");
+            Console.WriteLine("6: Save and exit");
             Console.Write("Choose an option: ");
 
             string? choice = Console.ReadLine();
@@ -122,6 +127,9 @@ public class ConsoleUiService
                     RemoveCredentialFlow(vault);
                     break;
                 case "5":
+                    GeneratePasswordFlow();
+                    break;
+                case "6":
                     try
                     {
                         _vaultService.SaveVault(filePath, vault, masterPassword);
@@ -151,8 +159,7 @@ public class ConsoleUiService
         Console.Write("Username: ");
         string? username = Console.ReadLine();
 
-        Console.Write("Password: ");
-        string? password = Console.ReadLine();
+        string password = SecureConsole.ReadHiddenInput("Password: ");
 
         if (string.IsNullOrWhiteSpace(site) ||
             string.IsNullOrWhiteSpace(username) ||
@@ -244,6 +251,39 @@ public class ConsoleUiService
 
         vault.Credentials.Remove(credential);
         ShowMessage("Credential removed.");   
+    }
+    
+    private void GeneratePasswordFlow()
+    {
+        Console.Clear();
+        Console.WriteLine("Generate password");
+        Console.Write("Enter desired password length (minimum 12, default 20): ");
+
+        string? input = Console.ReadLine();
+        int length = 20;
+
+        if (!string.IsNullOrWhiteSpace(input))
+        {
+            if (!int.TryParse(input, out length))
+            {
+                ShowMessage("Invalid number.");
+                return;
+            }
+        }
+
+        try
+        {
+            string password = _passwordGeneratorService.GeneratePassword(length);
+
+            Console.WriteLine();
+            Console.WriteLine("Generated password:");
+            Console.WriteLine(password);
+            Pause();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Error: {ex.Message}");
+        }
     }
     
     private void ShowMessage(string message)
