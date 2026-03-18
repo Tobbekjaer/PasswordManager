@@ -1,4 +1,7 @@
-# Password Manager - Secure Software Development Mini Project
+# Password Manager
+### Secure Software Development Mini Project
+
+---
 
 ## Overview
 This project implements a simple local password manager as part of the Secure Software Development course.
