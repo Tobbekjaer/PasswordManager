@@ -7,6 +7,8 @@ public class ConsoleUiService
 {
     private readonly VaultService _vaultService;
     private readonly PasswordGeneratorService _passwordGeneratorService;
+    
+    private static readonly TimeSpan AutoLockTimeout = TimeSpan.FromMinutes(2);
 
     public ConsoleUiService(VaultService vaultService, 
         PasswordGeneratorService passwordGeneratorService)
@@ -52,12 +54,19 @@ public class ConsoleUiService
     {
         Console.Clear();
         Console.WriteLine("Create new vault");
-        
+
         string masterPassword = SecureConsole.ReadHiddenInput("Enter master password: ");
+        string confirmPassword = SecureConsole.ReadHiddenInput("Confirm master password: ");
 
         if (string.IsNullOrWhiteSpace(masterPassword))
         {
             ShowMessage("Master password cannot be empty.");
+            return;
+        }
+
+        if (masterPassword != confirmPassword)
+        {
+            ShowMessage("Passwords do not match.");
             return;
         }
 
@@ -69,7 +78,7 @@ public class ConsoleUiService
         catch (Exception ex)
         {
             ShowMessage($"Error: {ex.Message}");
-        }        
+        }
     }
 
     private void OpenVaultFlow(string filePath)
@@ -98,8 +107,16 @@ public class ConsoleUiService
 
     private void VaultMenu(string filePath, VaultData vault, string masterPassword)
     {
+        DateTime lastActivityUtc = DateTime.UtcNow;
+
         while (true)
         {
+            if (IsSessionTimedOut(lastActivityUtc))
+            {
+                ShowMessage("Vault auto-locked due to inactivity. Unsaved changes were discarded.");
+                return;
+            }
+            
             Console.Clear();
             Console.WriteLine("Vault is unlocked. What do you want to do?");
             Console.WriteLine("1: Add credential");
@@ -111,23 +128,40 @@ public class ConsoleUiService
             Console.Write("Choose an option: ");
 
             string? choice = Console.ReadLine();
-
+            
+            if (string.IsNullOrWhiteSpace(choice))
+            {
+                ShowMessage("Invalid option. Try again.");
+                continue;
+            }
+            
+            if (IsSessionTimedOut(lastActivityUtc))
+            {
+                ShowMessage("Vault auto-locked due to inactivity. Unsaved changes were discarded.");
+                return;
+            }
+            
             switch (choice)
             {
                 case "1":
                     AddCredentialFlow(vault);
+                    lastActivityUtc = DateTime.UtcNow;
                     break;
                 case "2":
                     ListCredentialsFlow(vault);
+                    lastActivityUtc = DateTime.UtcNow;
                     break;
                 case "3":
                     ShowCredentialFlow(vault);
+                    lastActivityUtc = DateTime.UtcNow;
                     break;
                 case "4":
                     RemoveCredentialFlow(vault);
+                    lastActivityUtc = DateTime.UtcNow;
                     break;
                 case "5":
                     GeneratePasswordFlow();
+                    lastActivityUtc = DateTime.UtcNow;
                     break;
                 case "6":
                     try
@@ -300,4 +334,8 @@ public class ConsoleUiService
         Console.ReadLine();
     }
     
+    private bool IsSessionTimedOut(DateTime lastActivityUtc)
+    {
+        return DateTime.UtcNow - lastActivityUtc > AutoLockTimeout;
+    }
 }
